@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reparador y Convertidor de Excel - CENIS | Ismerely</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="estilos_cenis.css">
+</head>
+
+<body class="animar-entrada">
+    <header class="header-cenis">
+        <div class="brand-box">
+            <img src="logo_ismerely.png" alt="Ismerely Mi Estilo de Vida" class="logo-ismerely">
+            <div>
+                <h1 class="text-xl md:text-2xl font-bold m-0">Reparador y Convertidor de Excel · CENIS</h1>
+                <p class="text-xs text-pink-100 m-0">Convierte archivos antiguos o desordenados al Machote Oficial 2027
+                    listo para importar</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 space-y-6 pb-12">
+        <!-- PASO 1: CARGA Y CONFIGURACIÓN -->
+        <div class="tarjeta-cenis">
+            <h2 class="text-lg font-bold mb-1">1. Cargar Archivo Excel a Corregir</h2>
+            <p class="text-xs text-slate-500 mb-4">Detecta automáticamente la fila de encabezados, corrige nombres de
+                almacenes, fechas, montos, subtotales y detecta duplicados.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-bold uppercase mb-1">Formato Destino (Machote)</label>
+                    <select id="convTipoFormato">
+                        <option value="cancelaciones">Machote de Cancelaciones (2027)</option>
+                        <option value="cambios">Machote de Cambios de Forma de Pago (2027)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase mb-1">Archivo Excel de Entrada (.xlsx /
+                        .xls)</label>
+                    <input type="file" id="convArchivoInput" accept=".xlsx,.xls,.csv" class="input-file-ismerely">
+                </div>
+                <button type="button" onclick="analizarYConvertirArchivo()"
+                    class="btn-rosa py-2.5 px-5 text-xs uppercase">
+                    Analizar y Corregir Excel
+                </button>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-4 text-xs text-[#5a4352]">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chkOmitirDuplicados" checked class="accent-[#e6007e]">
+                    <span>Omitir filas con <strong>Núm. de venta duplicado</strong> al descargar</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chkValidarSupabase" checked class="accent-[#8cc63f]">
+                    <span>Verificar también si el <strong>Núm. de venta ya existe en Supabase</strong></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- PASO 2: RESUMEN DE DIAGNÓSTICO -->
+        <div id="seccionDiagnostico" class="hidden space-y-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="tarjeta-cenis">
+                    <p class="text-xs text-slate-500 uppercase font-bold m-0">Filas Leídas</p>
+                    <p id="statTotalLeidas" class="text-2xl font-black mt-1 mb-0">0</p>
+                </div>
+                <div class="tarjeta-cenis" style="border-left-color: var(--ismerely-verde);">
+                    <p class="text-xs text-slate-500 uppercase font-bold m-0">Listas para Exportar</p>
+                    <p id="statValidas" class="text-2xl font-black text-[#6da325] mt-1 mb-0">0</p>
+                </div>
+                <div class="tarjeta-cenis" style="border-left-color: #f59e0b;">
+                    <p class="text-xs text-slate-500 uppercase font-bold m-0">Almacenes / Datos Corregidos</p>
+                    <p id="statCorregidas" class="text-2xl font-black text-amber-600 mt-1 mb-0">0</p>
+                </div>
+                <div class="tarjeta-cenis" style="border-left-color: #e6007e;">
+                    <p class="text-xs text-slate-500 uppercase font-bold m-0">Duplicados Detectados</p>
+                    <p id="statDuplicados" class="text-2xl font-black text-[#e6007e] mt-1 mb-0">0</p>
+                </div>
+            </div>
+
+            <!-- BOTÓN DE DESCARGA -->
+            <div class="tarjeta-cenis flex flex-wrap justify-between items-center gap-4"
+                style="border-left-color: var(--ismerely-verde);">
+                <div>
+                    <h3 class="text-base font-bold m-0">2. Descargar Excel Corregido (Formato Machote)</h3>
+                    <p id="textoDetalleExport" class="text-xs text-slate-500 m-0">El archivo generado incluye los
+                        encabezados oficiales en la fila 3.</p>
+                </div>
+                <button type="button" onclick="descargarExcelCorregido()"
+                    class="btn-verde px-6 py-3 text-xs uppercase tracking-wider">
+                    ⬇ Descargar Excel Listo (.xlsx)
+                </button>
+            </div>
+
+            <!-- VISTA PREVIA DE RESULTADOS -->
+            <div class="tarjeta-cenis">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+                    <h3 class="text-base font-bold m-0">Vista Previa de Filas Procesadas</h3>
+                    <div class="flex items-center gap-2 text-xs">
+                        <button type="button" onclick="filtrarPreview('todos')"
+                            class="btn-oscuro px-3 py-1">Todas</button>
+                        <button type="button" onclick="filtrarPreview('corregidas')"
+                            class="btn-verde px-3 py-1">Corregidas</button>
+                        <button type="button" onclick="filtrarPreview('duplicados')"
+                            class="btn-rosa px-3 py-1">Duplicados</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="tabla-ismerely text-xs">
+                        <thead>
+                            <tr>
+                                <th>Fila Orig.</th>
+                                <th>Estado</th>
+                                <th>Fecha</th>
+                                <th>Núm. Venta</th>
+                                <th>Almacén (Normalizado)</th>
+                                <th>Embajador</th>
+                                <th>Total</th>
+                                <th>Responsable</th>
+                                <th>Notas de Corrección</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaPreviewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        let filasProcesadasGlobal = [];
+        let formatoActualGlobal = 'cancelaciones';
+        let nombreOriginalGlobal = 'archivo';
+        let filtroPreviewActual = 'todos';
+
+        function quitarAcentos(str) {
+            return String(str || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toUpperCase();
+        }
+
+        function limpiarFolioVenta(val) {
+            if (val === null || val === undefined) return '';
+            let s = String(val).replace(/[\r\n]+/g, ' ').trim();
+            if (/^\d+\.0+$/.test(s)) {
+                s = s.replace(/\.0+$/, '');
+            }
+            return s;
+        }
+
+        function limpiarMontoAvanzado(val) {
+            if (typeof val === 'number') {
+                return Number.isFinite(val) ? val : 0;
+            }
+            if (val === null || val === undefined) return 0;
+
+            const raw = String(val).trim();
+            if (!raw) return 0;
+
+            if (/^#(REF!|DIV\/0!|VALUE!|VALOR!|NAME\?|NOMBRE\?|N\/A|NUM!|NULL!)/i.test(raw)) {
+                return 0;
+            }
+
+            const esNegativoParentesis = /^\(.*\)$/.test(raw);
+            const sinSimbolos = raw
+                .replace(/[()]/g, '')
+                .replace(/\b(MXN|USD|PESOS|DLLS|DLS)\b/gi, '')
+                .replace(/\$/g, '')
+                .replace(/,/g, '')
+                .trim();
+
+            const num = parseFloat(sinSimbolos);
+            if (!Number.isFinite(num)) return 0;
+            return esNegativoParentesis ? -Math.abs(num) : num;
+        }
+
+        function esFilaResumenOSubtotal(numVenta, fechaRaw, filaCompletaTexto) {
+            const v = quitarAcentos(numVenta);
+            const f = quitarAcentos(fechaRaw);
+            const txt = quitarAcentos(filaCompletaTexto);
+
+            const palabrasCorte = ['TOTAL', 'SUBTOTAL', 'SUMA', 'PROMEDIO', 'GRAN TOTAL', 'CORTE'];
+            if (palabrasCorte.some(p => v === p || v.startsWith(p + ' ') || f === p || f.startsWith(p + ' '))) {
+                return true;
+            }
+            if (!v && !f && palabrasCorte.some(p => txt.startsWith(p))) {
+                return true;
+            }
+            return false;
+        }
+
+        function excelDateToISO(val) {
+            if (!val && val !== 0) return new Date().toISOString().split('T')[0];
+
+            if (val instanceof Date && !isNaN(val.getTime())) {
+                const y = val.getUTCFullYear();
+                const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+                const d = String(val.getUTCDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+
+            if (typeof val === 'number' && Number.isFinite(val)) {
+                const utcMs = Date.UTC(1899, 11, 30) + Math.round(val) * 86400000;
+                return new Date(utcMs).toISOString().split('T')[0];
+            }
+
+            const txt = String(val).trim();
+            const isoMatch = txt.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+            if (isoMatch) {
+                return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+            }
+
+            const dmyMatch = txt.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+            if (dmyMatch) {
+                let anio = dmyMatch[3];
+                if (anio.length === 2) anio = '20' + anio;
+                return `${anio}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+            }
+
+            const parsed = new Date(txt);
+            if (!isNaN(parsed.getTime())) {
+                return parsed.toISOString().split('T')[0];
+            }
+
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function normalizarAlmacen(centroRaw) {
+            const raw = String(centroRaw || '').trim();
+            if (!raw) return { nombre: '', corregido: false, nota: 'Sin centro' };
+
+            const norm = quitarAcentos(raw);
+            const todos = [
+                ...(CATALOGOS?.almacenes?.Nacional || []),
+                ...(CATALOGOS?.almacenes?.Extranjero || [])
+            ].filter(a => a.nombre);
+
+            let match = todos.find(a => quitarAcentos(a.nombre) === norm);
+            if (match) return { nombre: match.nombre, corregido: false, nota: '' };
+
+            const prefijo = norm.match(/^(\d{2,3})\b/);
+            if (prefijo) {
+                const code = prefijo[1];
+                match = todos.find(a => quitarAcentos(a.nombre).startsWith(code + '-') || quitarAcentos(a.nombre).startsWith(code + ' '));
+                if (match) {
+                    return {
+                        nombre: match.nombre,
+                        corregido: true,
+                        nota: `Almacén "${raw}" → "${match.nombre}"`
+                    };
+                }
+            }
+
+            const sinCodigo = norm.replace(/^\d+\s*-?\s*/, '').trim();
+            if (sinCodigo.length >= 4) {
+                match = todos.find(a => {
+                    const catSinCodigo = quitarAcentos(a.nombre).replace(/^\d+\s*-?\s*/, '').trim();
+                    return catSinCodigo.includes(sinCodigo) || sinCodigo.includes(catSinCodigo);
+                });
+                if (match) {
+                    return {
+                        nombre: match.nombre,
+                        corregido: true,
+                        nota: `Almacén "${raw}" → "${match.nombre}"`
+                    };
+                }
+            }
+
+            return { nombre: raw, corregido: false, nota: 'Centro no en catálogo estándar' };
+        }
+
+        function normalizarFormaPago(fpRaw) {
+            const txt = String(fpRaw || '').trim();
+            if (!txt) return '';
+            const norm = quitarAcentos(txt);
+            if (norm === 'SIN PAGOS REGISTRADOS' || norm === 'SIN PAGO REGISTRADO') {
+                return 'SIN P. REGISTRADOS';
+            }
+            return txt.toUpperCase();
+        }
+
+        function extraerTablaDeHoja(sheet) {
+            const matriz = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+            if (!Array.isArray(matriz) || matriz.length === 0) return [];
+
+            const palabrasClave = [
+                'FECHA', 'VENTA', 'MOSTRADOR', 'EMBAJADOR', 'DISTRIBUCION',
+                'ALMACEN', 'PAGO', 'MONTO', 'MOTIVO', 'RESPONSABLE', 'NOTA', 'SUSTITUCION'
+            ];
+
+            let mejorFila = -1;
+            let mejorScore = 0;
+
+            for (let i = 0; i < Math.min(matriz.length, 10); i++) {
+                const celdas = (matriz[i] || []).map(c => quitarAcentos(c)).filter(Boolean);
+                if (celdas.length < 3) continue;
+                let score = 0;
+                for (const c of celdas) {
+                    if (palabrasClave.some(k => c.includes(k))) score++;
+                }
+                if (score > mejorScore) {
+                    mejorScore = score;
+                    mejorFila = i;
+                }
+            }
+
+            if (mejorFila === -1 || mejorScore < 2) return [];
+
+            const headers = (matriz[mejorFila] || []).map((h, idx) => quitarAcentos(h) || `COL_${idx}`);
+            const resultado = [];
+
+            for (let r = mejorFila + 1; r < matriz.length; r++) {
+                const fila = matriz[r] || [];
+                const hayDatos = fila.some(v => v !== null && v !== undefined && String(v).trim() !== '');
+                if (!hayDatos) continue;
+
+                const obj = { _filaOrigen: r + 1 };
+                headers.forEach((h, idx) => {
+                    if (obj[h] === undefined || obj[h] === '') {
+                        obj[h] = fila[idx];
+                    }
+                });
+                resultado.push(obj);
+            }
+            return resultado;
+        }
+
+        async function analizarYConvertirArchivo() {
+            const input = document.getElementById('convArchivoInput');
+            if (!input.files.length) return alert('Selecciona primero un archivo Excel.');
+
+            formatoActualGlobal = document.getElementById('convTipoFormato').value;
+            const validarSupabase = document.getElementById('chkValidarSupabase').checked;
+            const file = input.files[0];
+            nombreOriginalGlobal = file.name.replace(/\.[^.]+$/, '');
+
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
+
+            let filasCrudas = [];
+            for (const sh of workbook.SheetNames) {
+                const extraidas = extraerTablaDeHoja(workbook.Sheets[sh]);
+                if (extraidas.length > filasCrudas.length) {
+                    filasCrudas = extraidas;
+                }
+            }
+
+            if (!filasCrudas.length) {
+                alert('No se pudo detectar una tabla válida en el archivo.');
+                return;
+            }
+
+            let ventasEnBD = new Set();
+            if (validarSupabase && formatoActualGlobal === 'cancelaciones' && window.supabaseClient) {
+                const { data } = await supabaseClient.from('cenis_cancelaciones').select('num_venta');
+                ventasEnBD = new Set((data || []).map(x => String(x.num_venta || '').trim()).filter(Boolean));
+            }
+
+            const ventasVistasEnArchivo = new Set();
+            const procesadas = [];
+
+            const getVal = (obj, ...cands) => {
+                for (const c of cands) {
+                    const k = quitarAcentos(c);
+                    if (obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== '') {
+                        return obj[k];
+                    }
+                }
+                return '';
+            };
+
+            for (const row of filasCrudas) {
+                const numVenta = limpiarFolioVenta(getVal(row, 'NUM DE VENTA', 'NUMERO DE VENTA', 'NO DE VENTA', 'FOLIO', 'VENTA'));
+                const fechaRaw = getVal(row, 'FECHA', 'FECHA REGISTRO', 'FECHA DE VENTA');
+
+                if ((!numVenta && !fechaRaw) || esFilaResumenOSubtotal(numVenta, fechaRaw, Object.values(row).join(' '))) {
+                    continue;
+                }
+
+                const notas = [];
+                const fechaISO = excelDateToISO(fechaRaw);
+                if (String(fechaRaw).trim() !== fechaISO) {
+                    notas.push('Fecha normalizada');
+                }
+
+                const usuarioMostrador = String(getVal(row, 'USUARIO DE MOSTRADOR', 'USUARIO', 'CAJERO', 'OPERADOR') || '').trim();
+                const idEmbajador = String(getVal(row, 'ID DE EMBAJADOR', 'ID DEL EMBAJADOR', 'ID EMBAJADOR') || '').trim();
+                const nombreEmbajador = String(getVal(row, 'NOMBRE DEL EMBAJADOR', 'NOMBRE DE EMBAJADOR', 'NOMBRE') || '').trim();
+                const centroRaw = String(getVal(row, 'CENTRO DE DISTRIBUCION', 'CENTRO', 'ALMACEN', 'SUCURSAL') || '').trim();
+                const almInfo = normalizarAlmacen(centroRaw);
+                if (almInfo.nota) notas.push(almInfo.nota);
+
+                const responsable = String(getVal(row, 'RESPONSABLE', 'HECHO POR', 'ELABORO') || 'ALEJANDRINA MEZA').trim().toUpperCase();
+
+                let duplicado = false;
+                if (numVenta) {
+                    if (ventasEnBD.has(numVenta)) {
+                        duplicado = true;
+                        notas.push('Ya existe en Supabase');
+                    } else if (ventasVistasEnArchivo.has(numVenta)) {
+                        duplicado = true;
+                        notas.push('Repetido dentro del Excel');
+                    }
+                    ventasVistasEnArchivo.add(numVenta);
+                } else {
+                    notas.push('Falta Núm. de venta');
+                }
+
+                if (formatoActualGlobal === 'cancelaciones') {
+                    const fp1 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 1', 'FORMA DE PAGO NO. 1', 'PAGO 1'));
+                    const m1 = limpiarMontoAvanzado(getVal(row, 'MONTO 1', 'MONTO DE PAGO NO. 1', 'IMPORTE 1'));
+                    const fp2 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 2', 'FORMA DE PAGO NO. 2', 'PAGO 2'));
+                    const m2 = limpiarMontoAvanzado(getVal(row, 'MONTO 2', 'MONTO DE PAGO NO. 2', 'IMPORTE 2'));
+                    const total = m1 + m2;
+                    const motivo = String(getVal(row, 'MOTIVO DE LA CANCELACION', 'MOTIVO CANCELACION', 'MOTIVO') || 'ERROR DE SISTEMA').trim().toUpperCase();
+                    const sustitucion = String(getVal(row, 'SUSTITUCION', 'SUSTITUCION DE LA NOTA') || '').trim();
+
+                    procesadas.push({
+                        filaOrigen: row._filaOrigen,
+                        duplicado,
+                        corregido: notas.length > 0,
+                        notas,
+                        fecha: fechaISO,
+                        numVenta,
+                        almacen: almInfo.nombre,
+                        embajador: nombreEmbajador,
+                        total,
+                        responsable,
+                        filaMachote: [
+                            fechaISO,
+                            usuarioMostrador,
+                            numVenta,
+                            idEmbajador,
+                            nombreEmbajador,
+                            almInfo.nombre,
+                            fp1,
+                            m1,
+                            fp2,
+                            m2,
+                            total,
+                            motivo,
+                            sustitucion,
+                            responsable
+                        ]
+                    });
+                } else {
+                    const fpc1 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 1 (CORREGIDO)', 'PAGO CORREGIDO 1'));
+                    const mc1 = limpiarMontoAvanzado(getVal(row, 'MONTO CORREGIDO 1'));
+                    const fpc2 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 2 (CORREGIDO)', 'PAGO CORREGIDO 2'));
+                    const mc2 = limpiarMontoAvanzado(getVal(row, 'MONTO CORREGIDO 2'));
+                    const fpc3 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 3 (CORREGIDO)', 'PAGO CORREGIDO 3'));
+                    const mc3 = limpiarMontoAvanzado(getVal(row, 'MONTO CORREGIDO 3'));
+
+                    const fpa1 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 1 (ANTERIOR)', 'PAGO ANTERIOR 1'));
+                    const ma1 = limpiarMontoAvanzado(getVal(row, 'MONTO ANTERIOR 1'));
+                    const fpa2 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 2 (ANTERIOR)', 'PAGO ANTERIOR 2'));
+                    const ma2 = limpiarMontoAvanzado(getVal(row, 'MONTO ANTERIOR 2'));
+                    const fpa3 = normalizarFormaPago(getVal(row, 'FORMA DE PAGO 3 (ANTERIOR)', 'PAGO ANTERIOR 3'));
+                    const ma3 = limpiarMontoAvanzado(getVal(row, 'MONTO ANTERIOR 3'));
+
+                    const total = mc1 + mc2 + mc3;
+                    const desc = String(getVal(row, 'DESCRIPCION DE LA NOTA', 'DESCRIPCION NOTA', 'DESCRIPCION') || '').trim();
+
+                    procesadas.push({
+                        filaOrigen: row._filaOrigen,
+                        duplicado,
+                        corregido: notas.length > 0,
+                        notas,
+                        fecha: fechaISO,
+                        numVenta,
+                        almacen: almInfo.nombre,
+                        embajador: nombreEmbajador,
+                        total,
+                        responsable,
+                        filaMachote: [
+                            fechaISO,
+                            usuarioMostrador,
+                            numVenta,
+                            idEmbajador,
+                            nombreEmbajador,
+                            almInfo.nombre,
+                            fpc1, mc1, fpc2, mc2, fpc3, mc3,
+                            fpa1, ma1, fpa2, ma2, fpa3, ma3,
+                            total,
+                            desc,
+                            responsable
+                        ]
+                    });
+                }
+            }
+
+            filasProcesadasGlobal = procesadas;
+            filtroPreviewActual = 'todos';
+            renderDiagnostico();
+        }
+
+        function filtrarPreview(modo) {
+            filtroPreviewActual = modo;
+            renderDiagnostico();
+        }
+
+        function renderDiagnostico() {
+            const total = filasProcesadasGlobal.length;
+            const duplicados = filasProcesadasGlobal.filter(f => f.duplicado).length;
+            const corregidas = filasProcesadasGlobal.filter(f => f.corregido && !f.duplicado).length;
+            const validas = total - duplicados;
+
+            document.getElementById('statTotalLeidas').innerText = total;
+            document.getElementById('statValidas').innerText = validas;
+            document.getElementById('statCorregidas').innerText = corregidas;
+            document.getElementById('statDuplicados').innerText = duplicados;
+            document.getElementById('seccionDiagnostico').classList.remove('hidden');
+
+            let listaMostrar = filasProcesadasGlobal;
+            if (filtroPreviewActual === 'corregidas') {
+                listaMostrar = filasProcesadasGlobal.filter(f => f.corregido && !f.duplicado);
+            } else if (filtroPreviewActual === 'duplicados') {
+                listaMostrar = filasProcesadasGlobal.filter(f => f.duplicado);
+            }
+
+            const tbody = document.getElementById('tablaPreviewBody');
+            tbody.innerHTML = listaMostrar.slice(0, 150).map(item => {
+                let badge = '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">Lista</span>';
+                if (item.duplicado) {
+                    badge = '<span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold">Duplicado</span>';
+                } else if (item.corregido) {
+                    badge = '<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">Corregida</span>';
+                }
+
+                return `
+                    <tr>
+                        <td class="text-slate-400">#${item.filaOrigen}</td>
+                        <td>${badge}</td>
+                        <td>${item.fecha}</td>
+                        <td class="font-bold">${item.numVenta || '-'}</td>
+                        <td>${item.almacen || '-'}</td>
+                        <td>${item.embajador || '-'}</td>
+                        <td><span class="badge-monto">$${item.total.toFixed(2)}</span></td>
+                        <td>${item.responsable}</td>
+                        <td class="text-slate-600">${item.notas.join(' · ') || 'Sin cambios'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function descargarExcelCorregido() {
+            if (!filasProcesadasGlobal.length) return alert('Primero analiza un archivo Excel.');
+
+            const omitirDup = document.getElementById('chkOmitirDuplicados').checked;
+            const filasFinales = filasProcesadasGlobal
+                .filter(f => !(omitirDup && f.duplicado))
+                .map(f => f.filaMachote);
+
+            if (!filasFinales.length) {
+                return alert('No quedaron filas disponibles para exportar.');
+            }
+
+            const esCancel = formatoActualGlobal === 'cancelaciones';
+            const tituloBanner = esCancel
+                ? 'ADMINISTRACIÓN DE CENIS\nFORMATO DE CANCELACIONES'
+                : 'ADMINISTRACIÓN DE CENIS\nFORMATO DE CAMBIOS DE FORMA DE PAGO';
+
+            const headers = esCancel
+                ? [
+                    'Fecha', 'Usuario de mostrador', 'Núm de venta', 'ID de embajador',
+                    'Nombre del embajador', 'Centro de distribución', 'Forma de pago 1',
+                    'Monto 1', 'Forma de pago 2', 'Monto 2', 'Total',
+                    'Motivo de la cancelación', 'Sustitución', 'Responsable'
+                ]
+                : [
+                    'Fecha', 'Usuario de mostrador', 'Núm de venta', 'ID de embajador',
+                    'Nombre del embajador', 'Centro de distribución',
+                    'Forma de pago 1\n(corregido)', 'Monto corregido 1',
+                    'Forma de pago 2\n(corregido)', 'Monto corregido 2',
+                    'Forma de pago 3\n(corregido)', 'Monto corregido 3',
+                    'Forma de pago 1\n(anterior)', 'Monto anterior 1',
+                    'Forma de pago 2\n(anterior)', 'Monto anterior 2',
+                    'Forma de pago 3\n(anterior)', 'Monto anterior 3',
+                    'Total', 'Descripción de la nota', 'Responsable'
+                ];
+
+            const hojaAOA = [
+                ['', '', '', '', tituloBanner, `FECHA DE ELABORACIÓN:\n${new Date().toLocaleDateString('es-MX')}`],
+                [],
+                headers,
+                ...filasFinales
+            ];
+
+            const ws = XLSX.utils.aoa_to_sheet(hojaAOA);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'MACHOTE');
+
+            const outName = `${nombreOriginalGlobal}_CORREGIDO_MACHOTE.xlsx`;
+            XLSX.writeFile(wb, outName);
+        }
+    </script>
+</body>
+
+</html>
